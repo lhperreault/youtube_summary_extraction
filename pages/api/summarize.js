@@ -8,6 +8,14 @@ export const config = {
   maxDuration: 60,
 };
 
+function chunkText(text, size) {
+  const chunks = [];
+  for (let i = 0; i < text.length; i += size) {
+    chunks.push(text.slice(i, i + size));
+  }
+  return chunks.length ? chunks : [''];
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -39,7 +47,7 @@ export default async function handler(req, res) {
 
     const message = await anthropic.messages.create({
       model: 'claude-haiku-4-5',
-      max_tokens: 1024,
+      max_tokens: 4096,
       messages: [{ role: 'user', content: prompt }],
     });
 
@@ -82,13 +90,13 @@ export default async function handler(req, res) {
             rich_text: [{ text: { content: 'Summary' } }],
           },
         },
-        {
+        ...chunkText(summary, 1900).map(chunk => ({
           object: 'block',
           type: 'paragraph',
           paragraph: {
-            rich_text: [{ text: { content: summary } }],
+            rich_text: [{ text: { content: chunk } }],
           },
-        },
+        })),
       ].filter(Boolean),
     });
 
