@@ -16,6 +16,57 @@ function chunkText(text, size) {
   return chunks.length ? chunks : [''];
 }
 
+// Parse inline markdown (**bold**, *italic*, `code`) into Notion rich_text array
+function parseInline(text) {
+  const parts = [];
+  const regex = /(\*\*([^*]+)\*\*|\*([^*]+)\*|`([^`]+)`)/g;
+  let lastIndex = 0;
+  let m;
+  while ((m = regex.exec(text)) !== null) {
+    if (m.index > lastIndex) {
+      parts.push({ type: 'text', text: { content: text.slice(lastIndex, m.index) } });
+    }
+    if (m[2]) {
+      parts.push({ type: 'text', text: { content: m[2] }, annotations: { bold: true } });
+    } else if (m[3]) {
+      parts.push({ type: 'text', text: { content: m[3] }, annotations: { italic: true } });
+    } else if (m[4]) {
+      parts.push({ type: 'text', text: { content: m[4] }, annotations: { code: true } });
+    }
+    lastIndex = regex.lastIndex;
+  }
+  if (lastIndex < text.length) {
+    parts.push({ type: 'text', text: { content: text.slice(lastIndex) } });
+  }
+  return parts.length ? parts : [{ type: 'text', text: { content: text } }];
+}
+
+// Convert markdown text into an array of Notion blocks
+function markdownToBlocks(md) {
+  const lines = md.split('\n');
+  const blocks = [];
+  for (let line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    let match;
+    if ((match = trimmed.match(/^###\s+(.*)/))) {
+      blocks.push({ object: 'block', type: 'heading_3', heading_3: { rich_text: parseInline(match[1]) } });
+    } else if ((match = trimmed.match(/^##\s+(.*)/))) {
+      blocks.push({ object: 'block', type: 'heading_2', heading_2: { rich_text: parseInline(match[1]) } });
+    } else if ((match = trimmed.match(/^#\s+(.*)/))) {
+      blocks.push({ object: 'block', type: 'heading_1', heading_1: { rich_text: parseInline(match[1]) } });
+    } else if ((match = trimmed.match(/^[-*]\s+(.*)/))) {
+      blocks.push({ object: 'block', type: 'bulleted_list_item', bulleted_list_item: { rich_text: parseInline(match[1]) } });
+    } else if ((match = trimmed.match(/^\d+\.\s+(.*)/))) {
+      blocks.push({ object: 'block', type: 'numbered_list_item', numbered_list_item: { rich_text: parseInline(match[1]) } });
+    } else {
+      blocks.push({ object: 'block', type: 'paragraph', paragraph: { rich_text: parseInline(trimmed) } });
+    }
+  }
+  return blocks;
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -90,13 +141,7 @@ export default async function handler(req, res) {
             rich_text: [{ text: { content: 'Summary' } }],
           },
         },
-        ...chunkText(summary, 1900).map(chunk => ({
-          object: 'block',
-          type: 'paragraph',
-          paragraph: {
-            rich_text: [{ text: { content: chunk } }],
-          },
-        })),
+        ...markdownToBlocks(summary),
       ].filter(Boolean),
     });
 

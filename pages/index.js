@@ -1,6 +1,35 @@
 import { useState } from 'react';
 import Head from 'next/head';
 
+function escapeHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function renderMd(md) {
+  const lines = md.split('\n');
+  let html = '';
+  let inList = null;
+  const closeList = () => { if (inList) { html += `</${inList}>`; inList = null; } };
+  const inline = (t) =>
+    escapeHtml(t)
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>');
+  for (let line of lines) {
+    const t = line.trim();
+    if (!t) { closeList(); continue; }
+    let m;
+    if ((m = t.match(/^###\s+(.*)/))) { closeList(); html += `<h3 style="margin-top:12px;color:#f1f1f1">${inline(m[1])}</h3>`; }
+    else if ((m = t.match(/^##\s+(.*)/))) { closeList(); html += `<h2 style="margin-top:14px;color:#f1f1f1">${inline(m[1])}</h2>`; }
+    else if ((m = t.match(/^#\s+(.*)/))) { closeList(); html += `<h1 style="margin-top:16px;color:#f1f1f1">${inline(m[1])}</h1>`; }
+    else if ((m = t.match(/^[-*]\s+(.*)/))) { if (inList !== 'ul') { closeList(); html += '<ul style="padding-left:20px">'; inList = 'ul'; } html += `<li>${inline(m[1])}</li>`; }
+    else if ((m = t.match(/^\d+\.\s+(.*)/))) { if (inList !== 'ol') { closeList(); html += '<ol style="padding-left:20px">'; inList = 'ol'; } html += `<li>${inline(m[1])}</li>`; }
+    else { closeList(); html += `<p style="margin:6px 0">${inline(t)}</p>`; }
+  }
+  closeList();
+  return html;
+}
+
 function extractVideoId(input) {
   input = input.trim();
   const patterns = [
@@ -124,7 +153,7 @@ export default function Home() {
         {result && (
           <div style={{ background: '#1a1a1a', borderRadius: 14, border: '1.5px solid #2a2a2a', padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
             <h2 style={{ fontSize: 17, fontWeight: 700, color: '#f1f1f1' }}>{result.title}</h2>
-            <p style={{ fontSize: 14, lineHeight: 1.7, color: '#ccc', whiteSpace: 'pre-wrap' }}>{result.summary}</p>
+            <div style={{ fontSize: 14, lineHeight: 1.7, color: '#ccc' }} dangerouslySetInnerHTML={{ __html: renderMd(result.summary) }} />
             <a
               href={result.notionUrl}
               target="_blank"
