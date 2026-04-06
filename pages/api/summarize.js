@@ -1,6 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { Client } from '@notionhq/client';
-import { YoutubeTranscript } from 'youtube-transcript';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const notion = new Client({ auth: process.env.NOTION_TOKEN });
@@ -17,9 +16,17 @@ export default async function handler(req, res) {
   if (!videoId) return res.status(400).json({ error: 'No videoId provided' });
 
   try {
-    // 1. Fetch transcript directly from YouTube
-    const items = await YoutubeTranscript.fetchTranscript(videoId);
-    const transcript = items.map(i => i.text).join(' ');
+    // 1. Fetch transcript via Supadata
+    const supadataRes = await fetch(
+      `https://api.supadata.ai/v1/youtube/transcript?videoId=${encodeURIComponent(videoId)}&text=true`,
+      { headers: { 'x-api-key': process.env.SUPADATA_API_KEY } }
+    );
+    if (!supadataRes.ok) {
+      const errText = await supadataRes.text();
+      return res.status(supadataRes.status).json({ error: `Supadata: ${errText}` });
+    }
+    const supadataData = await supadataRes.json();
+    const transcript = supadataData.content || supadataData.text || '';
 
     if (!transcript) {
       return res.status(404).json({ error: 'No transcript available for this video.' });
