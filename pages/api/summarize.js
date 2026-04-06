@@ -92,9 +92,10 @@ export default async function handler(req, res) {
     }
 
     // 2. Summarize with Claude Haiku
-    const prompt = userMessage
-      ? `The user wants you to focus on: "${userMessage}"\n\nHere is the YouTube transcript:\n\n${transcript}\n\nPlease provide:\n1. A concise title for this video's content\n2. A clear summary tailored to the user's focus above`
-      : `Here is a YouTube transcript:\n\n${transcript}\n\nPlease provide:\n1. A concise title for this video's content\n2. A clear summary of the key points`;
+    const focusLine = userMessage
+      ? `The user wants you to focus on: "${userMessage}"\n\n`
+      : '';
+    const prompt = `${focusLine}Here is a YouTube transcript:\n\n${transcript}\n\nRespond in EXACTLY this format and nothing else:\n\n<title>A concise title for this video's content</title>\n<summary>\nA clear, well-structured summary using markdown (## headings, **bold**, bullet lists). Do NOT wrap the summary in quotes or code blocks.\n</summary>`;
 
     const message = await anthropic.messages.create({
       model: 'claude-haiku-4-5',
@@ -104,11 +105,11 @@ export default async function handler(req, res) {
 
     const responseText = message.content[0].text;
 
-    const titleMatch = responseText.match(/1\.\s*(.+?)(?:\n|2\.)/s);
-    const summaryMatch = responseText.match(/2\.\s*([\s\S]+)/s);
+    const titleMatch = responseText.match(/<title>([\s\S]*?)<\/title>/);
+    const summaryMatch = responseText.match(/<summary>([\s\S]*?)<\/summary>/);
 
     const title = titleMatch ? titleMatch[1].trim().replace(/^["*]+|["*]+$/g, '') : 'YouTube Summary';
-    const summary = summaryMatch ? summaryMatch[1].trim() : responseText;
+    const summary = summaryMatch ? summaryMatch[1].trim() : responseText.trim();
 
     // 3. Save to Notion
     const notionPage = await notion.pages.create({
