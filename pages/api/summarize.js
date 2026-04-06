@@ -1,17 +1,31 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { Client } from '@notionhq/client';
+import { YoutubeTranscript } from 'youtube-transcript';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const notion = new Client({ auth: process.env.NOTION_TOKEN });
 
+export const config = {
+  maxDuration: 60,
+};
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { videoId, transcript, userMessage } = req.body;
+  const { videoId, userMessage } = req.body;
 
-  if (!transcript) return res.status(400).json({ error: 'No transcript provided' });
+  if (!videoId) return res.status(400).json({ error: 'No videoId provided' });
 
   try {
+    // 1. Fetch transcript directly from YouTube
+    const items = await YoutubeTranscript.fetchTranscript(videoId);
+    const transcript = items.map(i => i.text).join(' ');
+
+    if (!transcript) {
+      return res.status(404).json({ error: 'No transcript available for this video.' });
+    }
+
+    // 2. Summarize with Claude Haiku
     const prompt = userMessage
       ? `The user wants you to focus on: "${userMessage}"\n\nHere is the YouTube transcript:\n\n${transcript}\n\nPlease provide:\n1. A concise title for this video's content\n2. A clear summary tailored to the user's focus above`
       : `Here is a YouTube transcript:\n\n${transcript}\n\nPlease provide:\n1. A concise title for this video's content\n2. A clear summary of the key points`;
@@ -30,6 +44,7 @@ export default async function handler(req, res) {
     const title = titleMatch ? titleMatch[1].trim().replace(/^["*]+|["*]+$/g, '') : 'YouTube Summary';
     const summary = summaryMatch ? summaryMatch[1].trim() : responseText;
 
+    // 3. Save to Notion
     const notionPage = await notion.pages.create({
       parent: { database_id: process.env.NOTION_DATABASE_ID },
       properties: {

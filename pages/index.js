@@ -37,24 +37,13 @@ export default function Home() {
 
     setLoading(true);
     setResult(null);
-    setMsg('Step 1/3 — Fetching transcript…');
+    setMsg('Fetching transcript & summarizing…');
 
     try {
-      const webhookUrl = process.env.NEXT_PUBLIC_MAKE_WEBHOOK_URL ||
-        'https://hook.eu2.make.com/2i8cku75tlcv2y4udi4i6nza25noa1bt';
-      const transcriptRes = await fetch(`${webhookUrl}?video_id=${encodeURIComponent(videoId)}`);
-      if (!transcriptRes.ok) throw new Error(`Webhook error: ${transcriptRes.status}`);
-      const transcript = await transcriptRes.text();
-      if (!transcript || transcript.trim() === 'Accepted') {
-        throw new Error('Webhook returned no transcript. Try again in a few seconds.');
-      }
-
-      setMsg('Step 2/3 — Summarizing with Claude Haiku…');
-
       const apiRes = await fetch('/api/summarize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoId, transcript, userMessage }),
+        body: JSON.stringify({ videoId, userMessage }),
       });
 
       const data = await apiRes.json();
